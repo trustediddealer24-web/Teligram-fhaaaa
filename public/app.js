@@ -21,17 +21,19 @@ let reconnectAttempts = 0, lastSentText = '';
 const MAX_RECONNECT = 5;
 let worker = null;
 
-// ---- Tesseract Worker with better settings ----
+// ---- Tesseract Worker with BEST Settings ----
 async function initTesseract() {
     try {
         if (worker) await worker.terminate();
         worker = await Tesseract.createWorker(langSelect.value || 'eng');
-        // Set PSM to 6 (Assume a single uniform block of text)
+        // BEST SETTINGS FOR SMS TEXT
         await worker.setParameters({
-            tessedit_pageseg_mode: '6',
-            tessedit_ocr_engine_mode: '3' // LSTM only
+            tessedit_pageseg_mode: '6',      // Assume single text block
+            tessedit_ocr_engine_mode: '3',   // LSTM only (best accuracy)
+            tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz :-.!@#$%^&*()+=?/.,;',
+            tessedit_enable_dict: '0'        // Disable dictionary for better numbers/special chars
         });
-        log('✅ OCR Engine ready', 'system');
+        log('✅ OCR Engine (Ultra Mode) ready', 'system');
         return worker;
     } catch (err) {
         log('❌ OCR init error: ' + err.message, 'error');
@@ -68,8 +70,9 @@ function connectWebSocket() {
             const data = JSON.parse(e.data);
             if (data.type === 'status') {
                 if (data.success) {
-                    log(`✅ Sent: "${data.text}"`, 'success');
-                    ocrResult.textContent = `✅ ${data.text}`;
+                    const preview = data.text.substring(0, 50) + (data.text.length > 50 ? '...' : '');
+                    log(`✅ Sent: "${preview}"`, 'success');
+                    ocrResult.textContent = `✅ ${preview}`;
                     ocrResult.style.color = '#2ecc71';
                 } else {
                     log(`❌ Send failed: ${data.error}`, 'error');
@@ -120,7 +123,7 @@ async function startCamera() {
         flashBtn.disabled = false;
         statusText.textContent = '📸 Live';
         log('📷 Camera started (Back)', 'system');
-        ocrResult.textContent = '🔍 Point at text...';
+        ocrResult.textContent = '🔍 Point at SMS screen...';
         ocrResult.style.color = '#fff';
         if (autoScanToggle.checked) startAutoScan();
     } catch (err) {
@@ -184,7 +187,7 @@ captureBtn.addEventListener('click', () => {
     else alert('Start camera first.');
 });
 
-// ---- ⭐ Fixed OCR Function (No Mirror, Better Quality) ----
+// ---- ⭐ SUPER FAST + ACCURATE OCR (With Image Enhancement) ----
 async function performOCR() {
     if (!isCameraOn || !cameraVideo.videoWidth) {
         ocrResult.textContent = '⏳ Waiting for camera...';
@@ -202,17 +205,47 @@ async function performOCR() {
     try {
         const canvas = captureCanvas;
         const video = cameraVideo;
-        // Keep resolution decent for OCR
-        canvas.width = Math.min(video.videoWidth, 600);
-        canvas.height = Math.min(video.videoHeight, 450);
+        // Use slightly higher resolution for better accuracy, but still fast
+        canvas.width = Math.min(video.videoWidth, 640);
+        canvas.height = Math.min(video.videoHeight, 480);
         const ctx = canvas.getContext('2d');
 
-        // ✅ बिल्कुल सीधा Draw – No Mirror, No Flip
+        // Draw video frame (No Mirror)
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // (Optional) slight contrast enhancement
-        // const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        // ... skipped for speed
+        // 🔥 ADVANCED IMAGE PROCESSING for SMS
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        
+        // Step 1: Grayscale
+        for (let i = 0; i < data.length; i += 4) {
+            const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+            data[i] = gray;
+            data[i+1] = gray;
+            data[i+2] = gray;
+        }
+        
+        // Step 2: High Contrast (1.8x boost for dark mode SMS)
+        const contrast = 1.8;
+        for (let i = 0; i < data.length; i += 4) {
+            let val = 128 + contrast * (data[i] - 128);
+            val = Math.min(255, Math.max(0, val));
+            data[i] = val;
+            data[i+1] = val;
+            data[i+2] = val;
+        }
+        
+        // Step 3: Binarization (Optional - makes text crisp)
+        // For dark mode SMS, we threshold at 100
+        const threshold = 100;
+        for (let i = 0; i < data.length; i += 4) {
+            const val = data[i] > threshold ? 255 : 0;
+            data[i] = val;
+            data[i+1] = val;
+            data[i+2] = val;
+        }
+        
+        ctx.putImageData(imageData, 0, 0);
 
         const startTime = performance.now();
         const result = await worker.recognize(canvas);
@@ -222,17 +255,18 @@ async function performOCR() {
         log(`⚡ OCR done in ${elapsed}ms`, 'system');
 
         if (text.length > 0) {
-            ocrResult.textContent = `📝 ${text}`;
+            const preview = text.substring(0, 60) + (text.length > 60 ? '...' : '');
+            ocrResult.textContent = `📝 ${preview}`;
             ocrResult.style.color = '#2ecc71';
 
-            // Avoid duplicate spam
+            // Send to server (only if different from last)
             if (text !== lastSentText) {
                 lastSentText = text;
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'text', payload: text }));
-                    log(`📤 Sent: "${text}"`, 'system');
+                    log(`📤 Sent ${text.length} chars to Server`, 'system');
                 } else {
-                    log('⚠️ WS not open, text queued locally', 'error');
+                    log('⚠️ WS not open', 'error');
                 }
             } else {
                 log(`🔄 Duplicate ignored`, 'system');
@@ -288,4 +322,4 @@ window.addEventListener('beforeunload', () => {
     if (ws) ws.close();
 });
 
-log('🚀 Professional OCR App Ready! Start Camera.', 'system');
+log('🚀 ULTIMATE SMS SCANNER Ready! Point at SMS screen.', 'system');
