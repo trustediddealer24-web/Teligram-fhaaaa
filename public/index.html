@@ -3,51 +3,80 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>📸 Camera → Telegram</title>
+    <title>📸 Scan → Telegram</title>
     <link rel="stylesheet" href="style.css" />
 </head>
 <body>
     <div class="app-container">
-        <header><h1>📸 Camera → Telegram</h1><p class="subtitle">Back Camera OCR • Auto Send</p></header>
-        <main>
+        <div class="glass-card">
+            <header>
+                <h1>📸 Scan & Send</h1>
+                <p class="subtitle">Back Camera OCR • Auto Post to Telegram</p>
+            </header>
+
+            <!-- Status -->
             <div id="status-bar" class="status offline">
                 <span id="status-icon">🔴</span>
                 <span id="status-text">Disconnected</span>
             </div>
+
+            <!-- Camera Preview -->
             <div class="camera-wrapper">
                 <video id="cameraVideo" autoplay muted playsinline></video>
                 <canvas id="captureCanvas" style="display:none;"></canvas>
                 <div id="scanOverlay">
                     <div class="scan-line"></div>
-                    <div id="ocrResult">📝 Point camera at text...</div>
+                    <div id="ocrResult">📝 Point camera at any text...</div>
                 </div>
             </div>
+
+            <!-- Controls -->
             <div class="controls">
-                <button id="startBtn" class="btn primary">▶ Start Camera</button>
-                <button id="stopBtn" class="btn secondary" disabled>⏹ Stop</button>
-                <button id="captureBtn" class="btn accent" disabled>📸 Scan Now</button>
-                <button id="flashBtn" class="btn flash-btn" disabled>🔦 Torch</button>
+                <button id="startBtn" class="btn btn-primary glow">▶ Start</button>
+                <button id="stopBtn" class="btn btn-danger" disabled>⏹ Stop</button>
+                <button id="captureBtn" class="btn btn-accent" disabled>📸 Scan</button>
+                <button id="flashBtn" class="btn btn-warning" disabled>🔦 Torch</button>
             </div>
+
+            <!-- Settings -->
             <div class="settings">
-                <label><span>⏱ Interval (ms)</span><input type="number" id="intervalInput" value="1500" min="800" max="5000" /></label>
-                <label><span>🔤 Language</span>
+                <div class="setting-row">
+                    <label>⏱ Interval (ms)</label>
+                    <input type="number" id="intervalInput" value="1200" min="700" max="3000" step="100" />
+                </div>
+                <div class="setting-row">
+                    <label>🔤 Language</label>
                     <select id="langSelect">
                         <option value="eng">English</option>
                         <option value="hin">Hindi</option>
                         <option value="eng+hin">English + Hindi</option>
                     </select>
-                </label>
-                <label class="toggle-label"><span>🔄 Auto-Scan</span><input type="checkbox" id="autoScanToggle" checked /><span class="toggle-slider"></span></label>
+                </div>
+                <div class="setting-row toggle">
+                    <label>🔄 Auto-Scan</label>
+                    <input type="checkbox" id="autoScanToggle" checked />
+                    <span class="toggle-slider"></span>
+                </div>
             </div>
+
+            <!-- Activity Log -->
             <div class="log-area">
-                <h3>📋 Activity Log</h3>
-                <div id="logList"><div class="log-entry system">Ready. Start Camera.</div></div>
-                <button id="clearLogBtn" class="btn small">Clear Log</button>
+                <div class="log-header">
+                    <h3>📋 Activity</h3>
+                    <button id="clearLogBtn" class="btn btn-small">Clear</button>
+                </div>
+                <div id="logList">
+                    <div class="log-entry system">🟢 System ready. Start camera.</div>
+                </div>
             </div>
-        </main>
-        <footer><small>⚡ No images saved • Real-time OCR</small></footer>
+
+            <footer>
+                <small>⚡ No images saved • End-to-End encrypted</small>
+            </footer>
+        </div>
     </div>
+
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="app.js"></script>
 </body>
-  </html>
+</html>
