@@ -12,6 +12,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server, clientTracking: true });
 
+// Middleware
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(morgan('dev'));
@@ -27,6 +28,58 @@ if (!BOT_TOKEN || !CHANNEL_ID) {
     process.exit(1);
 }
 
+// ---------- 🔥 ULTIMATE SMS PARSER (Only Your Format) ----------
+function parseSmsFormat(rawText) {
+    // Step 1: Clean the text (remove extra spaces, newlines)
+    const clean = rawText.replace(/\s+/g, ' ').trim();
+    
+    // Step 2: Try to find "To:" and "Message:" patterns
+    // Pattern 1: "To: 1234567890" (with optional colon and space)
+    const toMatch = clean.match(/To\s*:\s*(\d{10,15})/i);
+    
+    // Pattern 2: "Message: some text" (case insensitive, handles "Message:", "MESSAGE:", etc.)
+    // Also handles OCR errors like "$D Message" -> we use a more flexible pattern
+    const msgMatch = clean.match(/(?:[a-zA-Z]+\s+)?Message\s*:\s*([^\n]+)/i);
+    
+    // Pattern 3: Sometimes OCR splits "Message:" into two lines, so try to find it differently
+    if (!msgMatch) {
+        // Try to find text after "Message:" even if there's a newline
+        const altMatch = clean.match(/Message\s*:\s*([\w\s\-!@#$%^&*()+=?.,;:{}|<>\/]+)/i);
+        if (altMatch) {
+            return {
+                to: toMatch ? toMatch[1] : null,
+                message: altMatch[1].trim(),
+                found: true
+            };
+        }
+    }
+    
+    if (toMatch && msgMatch) {
+        return {
+            to: toMatch[1],
+            message: msgMatch[1].trim(),
+            found: true
+        };
+    }
+    
+    // If not found, return null (means it's not an SMS screen)
+    return { found: false };
+}
+
+// ---------- Format Message Exactly as You Wanted ----------
+function formatTelegramMessage(to, message) {
+    if (!to || !message) return null;
+    
+    return `📱 SMS TOKEN 🖤 @anynomuospapa 
+━━━━━━━━━━━━━━━
+📞 To: ${to}
+💬 Message: ${message}
+
+📋 One-tap copy:
+${to} | ${message}`;
+}
+
+// ---------- Telegram Queue ----------
 class TelegramQueue {
     constructor() {
         this.queue = [];
@@ -80,30 +133,67 @@ class TelegramQueue {
 
 const telegramQueue = new TelegramQueue();
 
+// ---------- WebSocket ----------
 wss.on('connection', (ws, req) => {
     const clientId = Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
     console.log(`✅ Client ${clientId} connected`);
     ws.send(JSON.stringify({ type: 'connected', clientId }));
+
     ws.on('message', async (raw) => {
         try {
             const data = JSON.parse(raw);
             if (data.type === 'text' && data.payload) {
-                const text = data.payload.trim();
-                if (!text) return;
-                console.log(`📝 [${clientId}] Text: "${text}"`);
+                const rawText = data.payload.trim();
+                if (!rawText) return;
+
+                console.log(`📝 [${clientId}] Raw OCR (${rawText.length} chars): "${rawText.substring(0, 80)}..."`);
+
+                // ⭐ Step 1: Parse the SMS format
+                const parsed = parseSmsFormat(rawText);
+                
+                let finalMessage = null;
+                let statusType = 'raw';
+
+                if (parsed.found && parsed.to && parsed.message) {
+                    // ✅ SMS Format Found!
+                    finalMessage = formatTelegramMessage(parsed.to, parsed.message);
+                    statusType = 'sms';
+                    console.log(`✅ PARSED SMS: To=${parsed.to}, Msg=${parsed.message}`);
+                } else {
+                    // ❌ Not an SMS screen - send a clear message
+                    finalMessage = `⚠️ Format not recognized.\n\nPlease scan an SMS screen with "To:" and "Message:" fields.\n\nRaw text (first 100 chars):\n${rawText.substring(0, 100)}...`;
+                    statusType = 'error';
+                    console.log(`❌ Parser failed - not an SMS screen`);
+                }
+
+                // Send to Telegram
                 try {
-                    await telegramQueue.add(text);
-                    ws.send(JSON.stringify({ type: 'status', success: true, text }));
+                    await telegramQueue.add(finalMessage);
+                    ws.send(JSON.stringify({
+                        type: 'status',
+                        success: true,
+                        text: finalMessage,
+                        statusType: statusType,
+                        timestamp: Date.now()
+                    }));
                 } catch (err) {
-                    ws.send(JSON.stringify({ type: 'status', success: false, text, error: err.message }));
+                    ws.send(JSON.stringify({
+                        type: 'status',
+                        success: false,
+                        text: rawText,
+                        error: err.message,
+                        timestamp: Date.now()
+                    }));
                 }
             } else if (data.type === 'ping') {
                 ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
             }
         } catch (err) {
             console.error('Parse error:', err);
+            ws.send(JSON.stringify({ type: 'error', message: 'Invalid JSON' }));
         }
     });
+
     ws.on('close', () => console.log(`❌ Client ${clientId} disconnected`));
 });
 
@@ -112,7 +202,9 @@ setInterval(() => {
 }, 30000);
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`\n🚀 Server running on http://localhost:${PORT}`);
     console.log(`🤖 Bot: ${BOT_TOKEN ? '✅' : '❌'}`);
     console.log(`📢 Channel: ${CHANNEL_ID}`);
+    console.log(`🧠 ULTIMATE SMS PARSER is ACTIVE!`);
+    console.log(`📱 Only "To:" and "Message:" format will be sent.\n`);
 });
