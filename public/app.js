@@ -14,26 +14,28 @@ const captureCanvas = document.getElementById('captureCanvas');
 const ocrResult = document.getElementById('ocrResult');
 const logList = document.getElementById('logList');
 const clearLogBtn = document.getElementById('clearLogBtn');
+const modeCamera = document.getElementById('modeCamera');
+const modeScreen = document.getElementById('modeScreen');
 
 let ws = null, stream = null, captureInterval = null;
 let isCameraOn = false, isConnected = false, isProcessingOCR = false;
 let reconnectAttempts = 0, lastSentText = '';
 const MAX_RECONNECT = 5;
 let worker = null;
+let currentMode = 'camera'; // 'camera' or 'screen'
 
-// ---- Tesseract Worker with BEST Settings ----
+// ---- Tesseract Worker ----
 async function initTesseract() {
     try {
         if (worker) await worker.terminate();
         worker = await Tesseract.createWorker(langSelect.value || 'eng');
-        // BEST SETTINGS FOR SMS TEXT
         await worker.setParameters({
-            tessedit_pageseg_mode: '6',      // Assume single text block
-            tessedit_ocr_engine_mode: '3',   // LSTM only (best accuracy)
+            tessedit_pageseg_mode: '6',
+            tessedit_ocr_engine_mode: '3',
             tessedit_char_whitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz :-.!@#$%^&*()+=?/.,;',
-            tessedit_enable_dict: '0'        // Disable dictionary for better numbers/special chars
+            tessedit_enable_dict: '0'
         });
-        log('✅ OCR Engine (Ultra Mode) ready', 'system');
+        log('✅ OCR Engine ready', 'system');
         return worker;
     } catch (err) {
         log('❌ OCR init error: ' + err.message, 'error');
@@ -101,59 +103,115 @@ function connectWebSocket() {
 }
 connectWebSocket();
 
-// ---- Camera ----
+// ---- Mode Switching ----
+modeCamera.addEventListener('click', () => {
+    if (currentMode === 'camera') return;
+    currentMode = 'camera';
+    modeCamera.classList.add('active');
+    modeScreen.classList.remove('active');
+    stopCamera(); // stop current stream
+    log('📷 Switched to Camera mode', 'system');
+    // enable start button
+    if (isConnected) startBtn.disabled = false;
+});
+
+modeScreen.addEventListener('click', () => {
+    if (currentMode === 'screen') return;
+    currentMode = 'screen';
+    modeScreen.classList.add('active');
+    modeCamera.classList.remove('active');
+    stopCamera(); // stop current stream
+    log('🖥️ Switched to Screen Share mode', 'system');
+    if (isConnected) startBtn.disabled = false;
+});
+
+// ---- Start/Stop ----
 async function startCamera() {
     try {
         if (stream) stopCamera();
-        stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: 'environment',
-                width: { ideal: 640 },
-                height: { ideal: 480 },
-                frameRate: { ideal: 15 }
-            },
-            audio: false
-        });
+
+        let constraints;
+        if (currentMode === 'camera') {
+            constraints = {
+                video: {
+                    facingMode: 'environment',
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    frameRate: { ideal: 15 }
+                },
+                audio: false
+            };
+        } else { // screen share
+            constraints = {
+                video: {
+                    displaySurface: 'monitor',
+                    frameRate: { ideal: 15 }
+                },
+                audio: false,
+                preferCurrentTab: true
+            };
+        }
+
+        // For screen share, use getDisplayMedia; for camera use getUserMedia
+        if (currentMode === 'camera') {
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+        } else {
+            stream = await navigator.mediaDevices.getDisplayMedia(constraints);
+            // Handle user cancel
+            stream.getVideoTracks()[0].addEventListener('ended', () => {
+                stopCamera();
+                log('🖥️ Screen share stopped by user', 'system');
+            });
+        }
+
         cameraVideo.srcObject = stream;
         await cameraVideo.play();
         isCameraOn = true;
+
         startBtn.disabled = true;
         stopBtn.disabled = false;
         captureBtn.disabled = false;
-        flashBtn.disabled = false;
-        statusText.textContent = '📸 Live';
-        log('📷 Camera started (Back)', 'system');
-        ocrResult.textContent = '🔍 Point at SMS screen...';
+        if (currentMode === 'camera') flashBtn.disabled = false;
+        else flashBtn.disabled = true; // torch not available in screen share
+
+        statusText.textContent = currentMode === 'camera' ? '📸 Live (Camera)' : '🖥️ Live (Screen)';
+        log(`📷 ${currentMode === 'camera' ? 'Camera' : 'Screen Share'} started`, 'system');
+        ocrResult.textContent = currentMode === 'camera' ? '🔍 Point at SMS screen...' : '🖥️ Share the screen with SMS...';
         ocrResult.style.color = '#fff';
+
         if (autoScanToggle.checked) startAutoScan();
     } catch (err) {
-        log('❌ Camera error: ' + err.message, 'error');
-        alert('Camera error: ' + err.message);
+        log('❌ Start error: ' + err.message, 'error');
+        alert('Error: ' + err.message);
         startBtn.disabled = false;
+        stopBtn.disabled = true;
+        captureBtn.disabled = true;
+        flashBtn.disabled = true;
     }
 }
 
 function stopCamera() {
     if (stream) {
-        stream.getTracks().forEach(t => t.stop());
+        stream.getTracks().forEach(track => track.stop());
         stream = null;
     }
     cameraVideo.srcObject = null;
     isCameraOn = false;
     stopAutoScan();
+
     startBtn.disabled = false;
     stopBtn.disabled = true;
     captureBtn.disabled = true;
     flashBtn.disabled = true;
     statusText.textContent = 'Stopped';
-    log('⏹ Camera stopped', 'system');
-    ocrResult.textContent = '📝 Camera off';
+    log('⏹ Stream stopped', 'system');
+    ocrResult.textContent = '📝 Off';
 }
 
-// ---- Torch ----
+// ---- Torch (only in camera mode) ----
 let flashOn = false;
 flashBtn.addEventListener('click', () => {
-    if (!stream) return;
+    if (!stream || currentMode !== 'camera') return;
     const track = stream.getVideoTracks()[0];
     if (!track.getCapabilities().torch) {
         alert('Torch not supported');
@@ -184,13 +242,13 @@ function stopAutoScan() {
 // ---- Manual Capture ----
 captureBtn.addEventListener('click', () => {
     if (isCameraOn) performOCR();
-    else alert('Start camera first.');
+    else alert('Start the stream first.');
 });
 
-// ---- ⭐ SUPER FAST + ACCURATE OCR (With Image Enhancement) ----
+// ---- ⭐ OCR Function (Same for both modes) ----
 async function performOCR() {
     if (!isCameraOn || !cameraVideo.videoWidth) {
-        ocrResult.textContent = '⏳ Waiting for camera...';
+        ocrResult.textContent = '⏳ Waiting for stream...';
         return;
     }
     if (!worker) {
@@ -205,27 +263,23 @@ async function performOCR() {
     try {
         const canvas = captureCanvas;
         const video = cameraVideo;
-        // Use slightly higher resolution for better accuracy, but still fast
         canvas.width = Math.min(video.videoWidth, 640);
         canvas.height = Math.min(video.videoHeight, 480);
         const ctx = canvas.getContext('2d');
 
-        // Draw video frame (No Mirror)
+        // Draw the current frame (no mirror for both)
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        // 🔥 ADVANCED IMAGE PROCESSING for SMS
+        // Image processing (grayscale + contrast) helps both modes
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
-        
-        // Step 1: Grayscale
         for (let i = 0; i < data.length; i += 4) {
             const gray = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
             data[i] = gray;
             data[i+1] = gray;
             data[i+2] = gray;
         }
-        
-        // Step 2: High Contrast (1.8x boost for dark mode SMS)
+        // Contrast boost
         const contrast = 1.8;
         for (let i = 0; i < data.length; i += 4) {
             let val = 128 + contrast * (data[i] - 128);
@@ -234,9 +288,7 @@ async function performOCR() {
             data[i+1] = val;
             data[i+2] = val;
         }
-        
-        // Step 3: Binarization (Optional - makes text crisp)
-        // For dark mode SMS, we threshold at 100
+        // Binarization
         const threshold = 100;
         for (let i = 0; i < data.length; i += 4) {
             const val = data[i] > threshold ? 255 : 0;
@@ -244,7 +296,6 @@ async function performOCR() {
             data[i+1] = val;
             data[i+2] = val;
         }
-        
         ctx.putImageData(imageData, 0, 0);
 
         const startTime = performance.now();
@@ -259,7 +310,6 @@ async function performOCR() {
             ocrResult.textContent = `📝 ${preview}`;
             ocrResult.style.color = '#2ecc71';
 
-            // Send to server (only if different from last)
             if (text !== lastSentText) {
                 lastSentText = text;
                 if (ws && ws.readyState === WebSocket.OPEN) {
@@ -322,4 +372,4 @@ window.addEventListener('beforeunload', () => {
     if (ws) ws.close();
 });
 
-log('🚀 ULTIMATE SMS SCANNER Ready! Point at SMS screen.', 'system');
+log('🚀 ULTIMATE SMS SCANNER Ready! Choose mode & start.', 'system');
