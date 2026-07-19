@@ -3,18 +3,19 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>📸 Scan → Telegram</title>
+    <title>📸 SMS Scanner → Telegram</title>
     <link rel="stylesheet" href="style.css" />
 </head>
 <body>
     <div class="app-container">
         <div class="glass-card">
+            <!-- Header -->
             <header>
-                <h1>📸 Scan & Send</h1>
-                <p class="subtitle">Back Camera OCR • Auto Post to Telegram</p>
+                <h1>📸 SMS Scanner</h1>
+                <p class="subtitle">Auto-detect To: &amp; Message: • Instant Telegram</p>
             </header>
 
-            <!-- Status -->
+            <!-- Status Bar -->
             <div id="status-bar" class="status offline">
                 <span id="status-icon">🔴</span>
                 <span id="status-text">Disconnected</span>
@@ -26,7 +27,7 @@
                 <canvas id="captureCanvas" style="display:none;"></canvas>
                 <div id="scanOverlay">
                     <div class="scan-line"></div>
-                    <div id="ocrResult">📝 Point camera at any text...</div>
+                    <div id="ocrResult">📱 Point at SMS screen with "To:" &amp; "Message:"</div>
                 </div>
             </div>
 
@@ -66,17 +67,20 @@
                     <button id="clearLogBtn" class="btn btn-small">Clear</button>
                 </div>
                 <div id="logList">
-                    <div class="log-entry system">🟢 System ready. Start camera.</div>
+                    <div class="log-entry system">🟢 System ready. Start camera &amp; scan SMS.</div>
                 </div>
             </div>
 
+            <!-- Footer -->
             <footer>
-                <small>⚡ No images saved • End-to-End encrypted</small>
+                <small>⚡ No images saved • End-to-End encrypted • SMS Token Parser Active</small>
             </footer>
         </div>
     </div>
 
+    <!-- Tesseract.js -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <!-- Main App -->
     <script src="app.js"></script>
 </body>
 </html>
