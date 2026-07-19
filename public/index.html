@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>📸 Camera → Telegram</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="app-container">
+        <header><h1>📸 Camera → Telegram</h1><p class="subtitle">Back Camera OCR • Auto Send</p></header>
+        <main>
+            <div id="status-bar" class="status offline">
+                <span id="status-icon">🔴</span>
+                <span id="status-text">Disconnected</span>
+            </div>
+            <div class="camera-wrapper">
+                <video id="cameraVideo" autoplay muted playsinline></video>
+                <canvas id="captureCanvas" style="display:none;"></canvas>
+                <div id="scanOverlay">
+                    <div class="scan-line"></div>
+                    <div id="ocrResult">📝 Point camera at text...</div>
+                </div>
+            </div>
+            <div class="controls">
+                <button id="startBtn" class="btn primary">▶ Start Camera</button>
+                <button id="stopBtn" class="btn secondary" disabled>⏹ Stop</button>
+                <button id="captureBtn" class="btn accent" disabled>📸 Scan Now</button>
+                <button id="flashBtn" class="btn flash-btn" disabled>🔦 Torch</button>
+            </div>
+            <div class="settings">
+                <label><span>⏱ Interval (ms)</span><input type="number" id="intervalInput" value="1500" min="800" max="5000" /></label>
+                <label><span>🔤 Language</span>
+                    <select id="langSelect">
+                        <option value="eng">English</option>
+                        <option value="hin">Hindi</option>
+                        <option value="eng+hin">English + Hindi</option>
+                    </select>
+                </label>
+                <label class="toggle-label"><span>🔄 Auto-Scan</span><input type="checkbox" id="autoScanToggle" checked /><span class="toggle-slider"></span></label>
+            </div>
+            <div class="log-area">
+                <h3>📋 Activity Log</h3>
+                <div id="logList"><div class="log-entry system">Ready. Start Camera.</div></div>
+                <button id="clearLogBtn" class="btn small">Clear Log</button>
+            </div>
+        </main>
+        <footer><small>⚡ No images saved • Real-time OCR</small></footer>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="app.js"></script>
+</body>
+  </html>
